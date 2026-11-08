@@ -1,1 +1,1 @@
-{ "name": "cache-thermometer", "version": "0.1.3", "description": "Shows how warm the prompt cache is and when it goes cold, plus 5-hour and weekly usage left and a break-even keep-warm.", "types": "./types/index.d.ts" }
+{ "name": "cache-thermometer", "version": "0.1.6", "description": "Shows how warm the prompt cache is and when it goes cold, plus 5-hour and weekly usage left and a break-even keep-warm.", "types": "./types/index.d.ts" }
