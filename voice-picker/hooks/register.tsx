@@ -80,9 +80,9 @@ async function setSpeed($: Engine, raw: number) {
   await act($, ['--set-speed', String(v)], `Speed set to ${v}×.`)
 }
 
-async function openPane($: Engine) {
+async function openPane($: Engine, focus = false) {
   await update($, isOpen, () => true)
-  await $.ui.open({ id: PANE, title: TITLE })
+  await $.ui.open(focus ? { id: PANE, title: TITLE, focus: true } : { id: PANE, title: TITLE })
 }
 
 async function hidePane($: Engine) {
@@ -112,15 +112,21 @@ export const register: Register = on => {
     return next(e)
   })
 
+  // A small Voices button at the left of the band above the prompt, in every
+  // session and whether or not the pane is showing: the app can hide its
+  // sidebar without telling the mod, so the button never depends on that.
+  // Other mods' bands sit beside it, so it never pushes them out of view.
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     const below = await next(e)
-    if (await read($, isOpen)) return below
+    if (e.props.hasSurvey) return below
     const { Box, Button } = $.ui.resolve(e)
     return (
-      <Box flexDirection="column">
-        {below}
-        <Box flexDirection="row">
-          <Button key="show-voices" label="🔊 Voices" dimColor onPress={() => void openPane($)} />
+      <Box flexDirection="row" gap={1} alignItems="flex-start">
+        <Box flexShrink={0}>
+          <Button key="show-voices" label="🔊 Voices" dimColor onPress={() => void openPane($, true)} />
+        </Box>
+        <Box flexDirection="column" flexGrow={1} flexShrink={1}>
+          {below}
         </Box>
       </Box>
     )

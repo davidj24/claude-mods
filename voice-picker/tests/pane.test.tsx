@@ -44,6 +44,10 @@ test('opens at session start, shows a slider and a typed speed that saves', asyn
   expect(opened).toContain('voices')
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  // The Voices button is there even while the pane is open, left of other bands.
+  const band0 = await $.ui.mount({ plugin: 'voice-picker', component: 'AbovePrompt', surface: 'desktop', props: { bodyColumns: 80 } as never })
+  expect(await band0.find({ type: 'Button', key: 'show-voices' })).toBeTruthy()
+  await band0.unmount()
   expect(await ui.find({ type: 'Client', key: 'speed' })).toBeTruthy()
 
   await ui.input({ key: 'speed-typed', text: '1.25' })
