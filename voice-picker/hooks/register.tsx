@@ -32,12 +32,38 @@ const label = (id: string) => {
 }
 
 // read-aloud lives in a versioned cache folder; take the newest copy.
-const FIND =
-  'p=$(ls -d "$HOME"/.claude/plugins/cache/*/read-aloud/*/scripts/speak.py 2>/dev/null | sort -V | tail -1); ' +
-  '[ -n "$p" ] || { echo "read-aloud is not installed" >&2; exit 3; }; exec python3 "$p" "$@"'
+// Written in Python, which read-aloud needs anyway, because Windows has no sh.
+// It must stay one line: on Windows a newline in the argument drops the rest of
+// the code, and Python then exits successfully having printed nothing.
+const LAUNCH = [
+  'import glob, os, re, runpy, sys',
+  "found = glob.glob(os.path.join(os.path.expanduser('~'), '.claude', 'plugins', 'cache', '*', 'read-aloud', '*', 'scripts', 'speak.py'))",
+  "found or sys.exit('read-aloud is not installed')",
+  "script = max(found, key=lambda p: [int(n) for n in re.findall('[0-9]+', os.path.basename(os.path.dirname(os.path.dirname(p))))])",
+  'sys.path[0] = os.path.dirname(script)',
+  'sys.argv[0] = script',
+  "runpy.run_path(script, run_name='__main__')",
+].join('; ')
+
+// Which name Python answers to differs by machine. process.run rejects when a
+// program can't start, so try each until one does.
+const PYTHONS = ['python3', 'python', 'py']
 
 async function speak($: Engine, args: string[]) {
-  return $.process.run(['sh', '-c', FIND, 'speak', ...args], { timeoutMs: 20000 })
+  for (const python of PYTHONS) {
+    try {
+      return await $.process.run([python, '-c', LAUNCH, ...args], { timeoutMs: 20000 })
+    } catch {
+      // Not on this machine, or it timed out; the next name reports its own result.
+    }
+  }
+  return {
+    exitCode: 127,
+    stdout: '',
+    stderr: 'Could not start Python, which read-aloud needs.',
+    isStdoutTruncated: false,
+    isStderrTruncated: false,
+  }
 }
 
 async function refresh($: Engine) {

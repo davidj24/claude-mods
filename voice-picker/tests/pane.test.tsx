@@ -14,6 +14,35 @@ const PANE = {
   },
 } as const
 
+test('uses whichever name Python answers to, and never needs sh', async ($, on) => {
+  const tried: string[] = []
+  let launcher = ''
+  on('command.register', () => ({ value: { command: 'voices' } }))
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  on('process.run', (_, e) => {
+    tried.push(e.argv[0])
+    launcher = e.argv[2]
+    if (e.argv[0] === 'python3') return { deny: 'cannot start' }
+    const stdout = JSON.stringify({ provider: 'kokoro', voice: 'bf_emma', speed: 1, auto_read: false })
+    return { value: { exitCode: 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
+  })
+
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  // The speed control only draws once the settings came back through the fallback.
+  let speedControl = await ui.find({ type: 'Client', key: 'speed' })
+  for (let i = 0; i < 50 && !speedControl; i++) {
+    await new Promise(resolve => setTimeout(resolve, 5))
+    speedControl = await ui.find({ type: 'Client', key: 'speed' })
+  }
+  expect(speedControl).toBeTruthy()
+  expect(tried).toContain('python')
+  expect(tried).not.toContain('sh')
+  expect(launcher).not.toContain('\n')
+  await ui.unmount()
+})
+
 test('opens at session start, shows a slider and a typed speed that saves', async ($, on) => {
   const calls: string[][] = []
   const opened: string[] = []
@@ -31,7 +60,7 @@ test('opens at session start, shows a slider and a typed speed that saves', asyn
     return <Text>engine band</Text>
   })
   on('process.run', (_, e) => {
-    const args = e.argv.slice(4)
+    const args = e.argv.slice(3)
     calls.push(args)
     if (args[0] === '--set-speed') speed = Number(args[1])
     const stdout = args[0] === '--get-config'
