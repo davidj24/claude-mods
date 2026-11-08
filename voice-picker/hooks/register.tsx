@@ -112,29 +112,21 @@ export const register: Register = on => {
     return next(e)
   })
 
-  // A small Voices button in the top-right corner of the band above the
-  // prompt, in every session and whether or not the pane is showing: the app
-  // can hide its sidebar without telling the mod, so the button never depends
-  // on that. It floats over another mod's band rather than taking its width;
-  // with no other band it sits alone at the right.
+  // A small Voices button at the right of the band above the prompt, in every
+  // session and whether or not the pane is showing: the app can hide its
+  // sidebar without telling the mod, so the button never depends on that.
+  // The band is one tree for all mods; cache-thermometer (when it draws above
+  // this one) carries this button in its own top-right corner.
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     const below = await next(e)
     if (e.props.hasSurvey) return below
     const { Box, Button } = $.ui.resolve(e)
-    const button = <Button key="show-voices" label="🔊 Voices" dimColor onPress={() => void openPane($, true)} />
-    if (!below) {
-      return (
-        <Box flexDirection="row" justifyContent="flex-end">
-          {button}
-        </Box>
-      )
-    }
     return (
-      <Box position="relative" flexDirection="column">
-        {below}
-        <Box position="absolute" top={0} right={0}>
-          {button}
+      <Box flexDirection="column">
+        <Box flexDirection="row" justifyContent="flex-end">
+          <Button key="show-voices" label="🔊 Voices" dimColor onPress={() => void openPane($, true)} />
         </Box>
+        {below}
       </Box>
     )
   })
