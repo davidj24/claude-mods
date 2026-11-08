@@ -112,21 +112,28 @@ export const register: Register = on => {
     return next(e)
   })
 
-  // A small Voices button at the left of the band above the prompt, in every
-  // session and whether or not the pane is showing: the app can hide its
-  // sidebar without telling the mod, so the button never depends on that.
-  // Other mods' bands sit beside it, so it never pushes them out of view.
+  // A small Voices button in the top-right corner of the band above the
+  // prompt, in every session and whether or not the pane is showing: the app
+  // can hide its sidebar without telling the mod, so the button never depends
+  // on that. It floats over another mod's band rather than taking its width;
+  // with no other band it sits alone at the right.
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     const below = await next(e)
     if (e.props.hasSurvey) return below
     const { Box, Button } = $.ui.resolve(e)
-    return (
-      <Box flexDirection="row" gap={1} alignItems="flex-start">
-        <Box flexShrink={0}>
-          <Button key="show-voices" label="🔊 Voices" dimColor onPress={() => void openPane($, true)} />
+    const button = <Button key="show-voices" label="🔊 Voices" dimColor onPress={() => void openPane($, true)} />
+    if (!below) {
+      return (
+        <Box flexDirection="row" justifyContent="flex-end">
+          {button}
         </Box>
-        <Box flexDirection="column" flexGrow={1} flexShrink={1}>
-          {below}
+      )
+    }
+    return (
+      <Box position="relative" flexDirection="column">
+        {below}
+        <Box position="absolute" top={0} right={0}>
+          {button}
         </Box>
       </Box>
     )
