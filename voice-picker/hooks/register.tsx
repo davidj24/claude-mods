@@ -116,7 +116,7 @@ export const register: Register = on => {
   // session and whether or not the pane is showing: the app can hide its
   // sidebar without telling the mod, so the button never depends on that.
   // The band is one tree for all mods; cache-thermometer (when it draws above
-  // this one) carries this button in its own top-right corner.
+  // this one) carries this button in the row above its bar.
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     const below = await next(e)
     if (e.props.hasSurvey) return below

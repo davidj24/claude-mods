@@ -262,18 +262,16 @@ export const register: Register = on => {
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     await read($, tick) // redraw on every tick
     // The band is one tree for every mod. What the mods beneath draw (such as
-    // voice-picker's Voices button) is carried in this band's top-right corner,
-    // so it shows in every session whatever order the mods load in.
+    // voice-picker's Voices button) is carried above this bar, in the flow: it
+    // can hold the engine's own node, which refuses any Box with `position`.
     const below = await next(e)
     if (e.props.hasSurvey || (await read($, isHidden))) return below
 
     const { Box, Button, Text } = $.ui.resolve(e)
     const withBelow = (tree: JSX.Element) => (
-      <Box position="relative" flexDirection="column">
+      <Box flexDirection="column">
+        {below}
         {tree}
-        <Box position="absolute" top={0} right={0}>
-          {below}
-        </Box>
       </Box>
     )
     const isDesktop = e.surface === 'desktop'
