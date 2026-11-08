@@ -1,0 +1,1 @@
+{ "name": "dictation-cleanup", "version": "0.1.0", "description": "Strips filler words (um, uh) and stutter repeats from dictated prompts before they are sent. Local, zero tokens." }

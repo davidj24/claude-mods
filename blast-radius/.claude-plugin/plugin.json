@@ -1,0 +1,1 @@
+{ "name": "blast-radius", "version": "0.1.0", "description": "Before a destructive shell command runs, lists exactly what it would delete or discard and lets you cancel." }
