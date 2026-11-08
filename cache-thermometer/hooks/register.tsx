@@ -262,18 +262,13 @@ export const register: Register = on => {
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     await read($, tick) // redraw on every tick
     // The band is one tree for every mod. What the mods beneath draw (such as
-    // voice-picker's Voices button) is carried above this bar, in the flow: it
-    // can hold the engine's own node, which refuses any Box with `position`.
+    // voice-picker's Voices button) sits at the right of this bar's top row, in
+    // the flow: it can hold the engine's own node, which refuses any Box with
+    // `position`.
     const below = await next(e)
     if (e.props.hasSurvey || (await read($, isHidden))) return below
 
     const { Box, Button, Text } = $.ui.resolve(e)
-    const withBelow = (tree: JSX.Element) => (
-      <Box flexDirection="column">
-        {below}
-        {tree}
-      </Box>
-    )
     const isDesktop = e.surface === 'desktop'
     const Svg = isDesktop ? $.ui.resolve(e).Svg : undefined
     const now = await $.clock.now()
@@ -316,9 +311,12 @@ export const register: Register = on => {
 
     const at = await read($, lastAt)
     if (at === null) {
-      return withBelow(
+      return (
         <Box flexDirection="column" borderStyle="round" borderColor="#3a3a3a" paddingX={1}>
-          {usageRow}
+          <Box flexDirection="row" justifyContent="space-between" alignItems="flex-start" width="100%">
+            {usageRow}
+            {below}
+          </Box>
         </Box>
       )
     }
@@ -342,9 +340,9 @@ export const register: Register = on => {
 
     const cost = (w: number) => (perToken !== null ? `≈${pct(w * perToken)} of 5H` : `${k(context)} tokens`)
 
-    return withBelow(
+    return (
       <Box flexDirection="column" borderStyle="round" borderColor="#3a3a3a" paddingX={1} gap={1}>
-        <Box flexDirection="row" gap={4} alignItems="center" flexWrap="wrap" justifyContent="space-between" width="100%">
+        <Box flexDirection="row" justifyContent="space-between" alignItems="flex-start" width="100%">
           <Box flexDirection="column" minWidth={300}>
             <Box flexDirection="row" gap={1} alignItems="center">
               <Text backgroundColor={heat} color="#141414" weight="bold" size="caption">
@@ -357,6 +355,9 @@ export const register: Register = on => {
             <Text dimColor size="caption">{isWarm ? `until the cache cools (${ttl === 60 ? '1h' : '5m'} cache)` : 'cache has cooled'}</Text>
             {bar('cache', 300, frac, [COLD, COOLING, WARM], true, `${Math.round(frac * 100)}% of cache life left`)}
           </Box>
+          {below}
+        </Box>
+        <Box flexDirection="row" gap={4} alignItems="center" flexWrap="wrap" justifyContent="space-between" width="100%">
           {context > 0 && (
             <Box flexDirection="column">
               <Text dimColor size="caption">{isWarm ? 'Reply now' : 'Next reply'}</Text>
