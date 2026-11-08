@@ -4,6 +4,7 @@
   "plugins": [
     { "name": "blast-radius", "source": "./blast-radius", "description": "Before a destructive shell command runs, lists exactly what it would delete or discard and lets you cancel." },
     { "name": "cache-thermometer", "source": "./cache-thermometer", "description": "Prompt-cache timer, 5-hour and weekly usage bars, break-even keep-warm." },
-    { "name": "dictation-cleanup", "source": "./dictation-cleanup", "description": "Strips um/uh and stutter repeats from dictated prompts before they are sent." }
+    { "name": "dictation-cleanup", "source": "./dictation-cleanup", "description": "Strips um/uh and stutter repeats from dictated prompts before they are sent." },
+    { "name": "voice-picker", "source": "./voice-picker", "description": "A Voices pane for the read-aloud plugin: play samples, pick a voice, set speed with a slider, toggle auto-read." }
   ]
 }
