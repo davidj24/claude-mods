@@ -43,6 +43,31 @@ test('uses whichever name Python answers to, and never needs sh', async ($, on) 
   await ui.unmount()
 })
 
+test('Stop ends the whole reading on Windows, in one line', async ($, on) => {
+  const launchers: string[] = []
+  on('command.register', () => ({ value: { command: 'voices' } }))
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  on('process.run', (_, e) => {
+    if (e.argv[3] === '--stop') launchers.push(e.argv[2])
+    const stdout = JSON.stringify({ provider: 'kokoro', voice: 'bf_emma', speed: 1, auto_read: false })
+    return { value: { exitCode: 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
+  })
+
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  for (let i = 0; i < 50 && !(await ui.find({ type: 'Button', key: 'stop' })); i++) {
+    await new Promise(resolve => setTimeout(resolve, 5))
+  }
+  await ui.press({ key: 'stop' })
+  for (let i = 0; i < 50 && launchers.length === 0; i++) {
+    await new Promise(resolve => setTimeout(resolve, 5))
+  }
+  expect(launchers[0]).toContain('taskkill')
+  expect(launchers[0]).not.toContain('\n')
+  await ui.unmount()
+})
+
 test('opens at session start, shows a slider and a typed speed that saves', async ($, on) => {
   const calls: string[][] = []
   const opened: string[] = []

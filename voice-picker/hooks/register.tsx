@@ -45,14 +45,22 @@ const LAUNCH = [
   "runpy.run_path(script, run_name='__main__')",
 ].join('; ')
 
+// read-aloud's --stop ends only the reader process. On Windows its audio player
+// is a separate process that outlives it and keeps playing, so end the whole
+// tree first. Does nothing on other systems, where --stop is enough.
+const KILL_READING =
+  "import os, subprocess, tempfile; pid_file = os.path.join(tempfile.gettempdir(), 'claude-read-aloud.pid'); " +
+  "os.name == 'nt' and os.path.exists(pid_file) and subprocess.run(['taskkill', '/T', '/F', '/PID', open(pid_file).read().strip()], capture_output=True, creationflags=0x08000000)"
+
 // Which name Python answers to differs by machine. process.run rejects when a
 // program can't start, so try each until one does.
 const PYTHONS = ['python3', 'python', 'py']
 
 async function speak($: Engine, args: string[]) {
+  const code = args[0] === '--stop' ? `${KILL_READING}; ${LAUNCH}` : LAUNCH
   for (const python of PYTHONS) {
     try {
-      return await $.process.run([python, '-c', LAUNCH, ...args], { timeoutMs: 20000 })
+      return await $.process.run([python, '-c', code, ...args], { timeoutMs: 20000 })
     } catch {
       // Not on this machine, or it timed out; the next name reports its own result.
     }
