@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface as Engine, Register } from 'claude-code'
 
-import type { VoiceConfig } from '../types'
+import type { Player, VoiceConfig } from '../types'
 
 const PANE = 'voices'
 const TITLE = 'Voices'
@@ -11,6 +11,7 @@ const config = atom({ plugin: 'voice-picker', key: 'config' } as const, null, { 
 const group = atom({ plugin: 'voice-picker', key: 'group' } as const, 'bf', { shape: 'group-1' })
 const note = atom({ plugin: 'voice-picker', key: 'note' } as const, '', { shape: 'note-1' })
 const isOpen = atom({ plugin: 'voice-picker', key: 'isOpen' } as const, false, { shape: 'open-1' })
+const player = atom({ plugin: 'voice-picker', key: 'player' } as const, null, { shape: 'player-1' })
 
 // Kokoro's fixed roster, grouped by the prefix of the id (language + gender).
 const GROUPS: { value: string; label: string; ids: string[] }[] = [
@@ -74,7 +75,20 @@ async function speak($: Engine, args: string[]) {
   }
 }
 
-async function refresh($: Engine) {
+// The voice-reader service (Linux, ~/projects/Claude/voice-reader) is used when
+// it is running; everywhere else the pane drives read-aloud as above.
+async function ctl($: Engine, method: 'GET' | 'POST', path: string, body?: string) {
+  const runtime = await $.env.get('XDG_RUNTIME_DIR').catch(() => undefined)
+  if (!runtime) return undefined
+  const args = ['curl', '-sf', '-m', '4', '--unix-socket', `${runtime}/voice-reader.sock`, '-X', method, `http://localhost${path}`]
+  if (body !== undefined) args.push('--data-binary', '@-')
+  return $.process.run(args, body === undefined ? { timeoutMs: 6000 } : { timeoutMs: 6000, stdin: body }).catch(() => undefined)
+}
+
+let useReader = false
+let lastStatus = ''
+
+async function refreshReadAloud($: Engine) {
   const r = await speak($, ['--get-config'])
   if (r.exitCode !== 0) {
     await update($, note, () => (r.stderr.trim() || 'Could not read the read-aloud settings.'))
@@ -89,15 +103,69 @@ async function refresh($: Engine) {
       autoRead: Boolean(c.auto_read),
     }
     await update($, config, () => next)
+    await update($, player, () => null)
   } catch {
     await update($, note, () => 'Could not read the read-aloud settings.')
   }
 }
 
-async function act($: Engine, args: string[], message: string) {
-  const r = await speak($, args)
-  await update($, note, () => (r.exitCode === 0 ? message : r.stderr.trim() || 'That did not work.'))
+// One status read fills both the settings and the player, and redraws only on a change.
+async function refresh($: Engine) {
+  const r = await ctl($, 'GET', '/status')
+  if (!r || r.exitCode !== 0) {
+    useReader = false
+    lastStatus = ''
+    await refreshReadAloud($)
+    return
+  }
+  useReader = true
+  if (r.stdout === lastStatus) return
+  lastStatus = r.stdout
+  try {
+    const c = JSON.parse(r.stdout)
+    const nextConfig: VoiceConfig = {
+      provider: 'kokoro',
+      voice: String(c.voice ?? ''),
+      speed: Number(c.speed ?? 1),
+      autoRead: Boolean(c.autoRead),
+    }
+    const nextPlayer: Player = {
+      state: String(c.state),
+      isBuffering: Boolean(c.buffering),
+      position: Number(c.position ?? 0),
+      duration: Number(c.duration ?? 0),
+      isEstimate: Boolean(c.isEstimate),
+      index: Number(c.index ?? 0),
+      count: Number(c.count ?? 0),
+      text: String(c.text ?? ''),
+    }
+    await update($, config, () => nextConfig)
+    await update($, player, () => nextPlayer)
+  } catch {
+    await update($, note, () => 'Could not read the voice reader status.')
+  }
+}
+
+// Each action names how to do it on both backends.
+type Action = { path: string; legacy: string[]; body?: string }
+
+async function act($: Engine, action: Action, message: string) {
+  if (useReader) {
+    const r = await ctl($, 'POST', action.path, action.body)
+    await update($, note, () => (r?.exitCode === 0 ? message : 'The voice reader did not respond.'))
+  } else {
+    const r = await speak($, action.legacy)
+    await update($, note, () => (r.exitCode === 0 ? message : r.stderr.trim() || 'That did not work.'))
+  }
   await refresh($)
+}
+
+// Player buttons exist only with the voice reader.
+const control = (path: string): Action => ({ path, legacy: [] })
+
+const clock = (seconds: number) => {
+  const s = Math.max(0, Math.round(seconds))
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
 }
 
 const MIN_SPEED = 0.5
@@ -111,7 +179,7 @@ async function setSpeed($: Engine, raw: number) {
   const v = Math.round(Math.min(MAX_SPEED, Math.max(MIN_SPEED, raw)) * 100) / 100
   // Show the new speed at once; the saved value confirms it a moment later.
   await update($, config, c => (c ? { ...c, speed: v } : c))
-  await act($, ['--set-speed', String(v)], `Speed set to ${v}×.`)
+  await act($, { path: `/config?speed=${v}`, legacy: ['--set-speed', String(v)] }, `Speed set to ${v}×.`)
 }
 
 async function openPane($: Engine, focus = false) {
@@ -126,15 +194,44 @@ async function hidePane($: Engine) {
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
-    await $.command.register({ name: 'voices', description: 'Open the Voices pane: hear, pick and set the read-aloud voice' })
+    await $.command.register({ name: 'voices', description: 'Open the Voices pane: pick a voice, control the reading' })
     void refresh($)
+    // Follows the player: every second while something is loaded, else every 5 seconds.
+    // With no voice reader here it only rechecks now and then for one appearing.
+    let ticks = 0
+    $.clock.every(1000, () => {
+      void (async () => {
+        ticks += 1
+        if (!useReader) {
+          if (ticks % 60 === 0 && (await ctl($, 'GET', '/status'))?.exitCode === 0) await refresh($)
+          return
+        }
+        const p = await read($, player)
+        if ((p && (p.state === 'playing' || p.state === 'paused')) || ticks % 5 === 0) await refresh($)
+      })()
+    })
     // Always there: the pane opens with every session. Hide (or the pane's
     // own close) folds it into a small Voices button above the prompt.
     void openPane($)
     return next(e)
   })
 
+  // Each finished reply goes to the voice reader, which ignores it while
+  // auto-read is off. Without the reader, read-aloud's own hook does this.
+  on('turn.complete', async ($, e, next) => {
+    if (useReader && e.agentId === undefined && e.reason === 'answer' && e.answer.trim() !== '') {
+      await ctl($, 'POST', '/speak?source=claude', e.answer)
+    }
+    return next(e)
+  })
+
   on('ui.message', async ($, e, next) => {
+    if (e.requestId === PANE && e.element === 'seek') {
+      const data = e.data as { to?: unknown } | null
+      if (data && typeof data.to === 'number') await ctl($, 'POST', `/seek?to=${data.to.toFixed(2)}`)
+      await refresh($)
+      return {}
+    }
     if (e.requestId !== PANE || e.element !== 'speed') return next(e)
     const data = e.data as { speed?: unknown } | null
     if (data && typeof data.speed === 'number') await setSpeed($, data.speed)
@@ -181,6 +278,9 @@ export const register: Register = on => {
     const g = await read($, group)
     const msg = await read($, note)
     const shown = GROUPS.find(x => x.value === g) ?? GROUPS[2]!
+    const p = await read($, player)
+    const hasPlayer = p !== null
+    const hasReading = p !== null && p.state !== 'idle' && p.count > 0
 
     if (!c) {
       return (
@@ -209,12 +309,51 @@ export const register: Register = on => {
             variant={c.autoRead ? 'secondary' : 'primary'}
             label={c.autoRead ? 'Turn auto-read off' : 'Turn auto-read on'}
             onPress={() =>
-              void act($, ['--auto', c.autoRead ? 'off' : 'on'], c.autoRead ? 'Auto-read is off.' : 'Every reply will now be read aloud.')
+              void act(
+                $,
+                { path: `/config?autoRead=${c.autoRead ? 'false' : 'true'}`, legacy: ['--auto', c.autoRead ? 'off' : 'on'] },
+                c.autoRead ? 'Auto-read is off.' : 'Every reply will now be read aloud.',
+              )
             }
           />
-          <Button key="stop" label="Stop" onPress={() => void act($, ['--stop'], 'Stopped.')} />
+          {!hasPlayer && <Button key="stop" label="Stop" onPress={() => void act($, { path: '/stop', legacy: ['--stop'] }, 'Stopped.')} />}
           <Button key="hide" label="Hide" dimColor onPress={() => void hidePane($)} />
         </Box>
+
+        {hasReading && p && (
+          <Box flexDirection="column" gap={1}>
+            <Text weight="medium">
+              {p.state === 'finished' ? 'Finished' : p.isBuffering ? 'Getting ready…' : p.state === 'paused' ? 'Paused' : 'Reading'}
+              {' · '}sentence {p.index + 1} of {p.count}
+            </Text>
+            {p.text !== '' && <Text dimColor wrap="truncate-end">{p.text}</Text>}
+            {Client && (
+              <Client
+                key="seek"
+                module="./seek.tsx"
+                width="100%"
+                height={1}
+                props={{ position: p.position, duration: p.duration }}
+              />
+            )}
+            <Text dimColor tabular>
+              {clock(p.position)} / {p.isEstimate ? 'about ' : ''}{clock(p.duration)}
+            </Text>
+            <Box flexDirection="row" gap={1} flexWrap="wrap">
+              <Button key="prev" label="⏮" onPress={() => void act($, control('/sentence?by=-1'), '')} />
+              <Button key="back" label="−10s" onPress={() => void act($, control('/skip?by=-10'), '')} />
+              <Button
+                key="toggle"
+                variant="primary"
+                label={p.state === 'paused' ? '▶ Resume' : p.state === 'finished' ? '↺ Replay' : '⏸ Pause'}
+                onPress={() => void act($, control('/toggle'), '')}
+              />
+              <Button key="forward" label="+10s" onPress={() => void act($, control('/skip?by=10'), '')} />
+              <Button key="next" label="⏭" onPress={() => void act($, control('/sentence?by=1'), '')} />
+              <Button key="stop" label="⏹ Stop" onPress={() => void act($, control('/stop'), '')} />
+            </Box>
+          </Box>
+        )}
 
         <Box flexDirection="column">
           <Text weight="medium">{Client ? 'Speed' : `Speed ${speed}×`}</Text>
@@ -272,7 +411,15 @@ export const register: Register = on => {
                     key={`play-${id}`}
                     label="▶ Play"
                     onPress={() =>
-                      void act($, ['--detach', '--voice', id, '--text', SAMPLE.replace('NAME', name(id))], `Playing ${label(id)}…`)
+                      void act(
+                        $,
+                        {
+                          path: `/speak?source=sample&voice=${id}`,
+                          body: SAMPLE.replace('NAME', name(id)),
+                          legacy: ['--detach', '--voice', id, '--text', SAMPLE.replace('NAME', name(id))],
+                        },
+                        `Playing ${label(id)}…`,
+                      )
                     }
                   />
                   <Button
@@ -282,8 +429,10 @@ export const register: Register = on => {
                     onPress={() => {
                       if (inUse) return
                       void (async () => {
-                        await act($, ['--set-voice', id], `${label(id)} is now your reading voice.`)
-                        await speak($, ['--detach', '--text', `Voice saved. This is ${name(id)} from now on.`])
+                        await act($, { path: `/config?voice=${id}`, legacy: ['--set-voice', id] }, `${label(id)} is now your reading voice.`)
+                        const saved = `Voice saved. This is ${name(id)} from now on.`
+                        if (useReader) await ctl($, 'POST', '/speak?source=sample', saved)
+                        else await speak($, ['--detach', '--text', saved])
                       })()
                     }}
                   />

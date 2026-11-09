@@ -1,4 +1,4 @@
-import { expect, test } from 'claude-code/testing'
+import { expect, mock, test } from 'claude-code/testing'
 
 const PANE = {
   plugin: 'voice-picker',
@@ -102,6 +102,9 @@ test('opens at session start, shows a slider and a typed speed that saves', asyn
   const band0 = await $.ui.mount({ plugin: 'voice-picker', component: 'AbovePrompt', surface: 'desktop', props: { bodyColumns: 80 } as never })
   expect(await band0.find({ type: 'Button', key: 'show-voices' })).toBeTruthy()
   await band0.unmount()
+  for (let i = 0; i < 50 && !(await ui.find({ type: 'Client', key: 'speed' })); i++) {
+    await new Promise(resolve => setTimeout(resolve, 5))
+  }
   expect(await ui.find({ type: 'Client', key: 'speed' })).toBeTruthy()
 
   await ui.input({ key: 'speed-typed', text: '1.25' })
@@ -130,4 +133,46 @@ test('opens at session start, shows a slider and a typed speed that saves', asyn
   await band.press({ key: 'show-voices' })
   expect(opened.length).toBe(before + 1)
   await band.unmount()
+})
+
+test('a reading shows the player, its buttons reach the reader, and replies are sent', async ($, on) => {
+  const calls: { path: string; stdin?: string }[] = []
+  const clock = mock.clock(on)
+  mock.env(on, { XDG_RUNTIME_DIR: '/run/user/1000' })
+  on('command.register', () => ({ value: { command: 'voices' } }))
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  on('turn.complete', () => ({ text: '' }))
+  on('process.run', (_, e) => {
+    const path = String(e.argv[8]).replace('http://localhost', '')
+    calls.push({ path, stdin: e.init?.stdin })
+    const stdout = path === '/status'
+      ? JSON.stringify({ state: 'playing', buffering: false, voice: 'af_heart', speed: 1, autoRead: true, position: 62, duration: 190, isEstimate: true, index: 2, count: 9, text: 'The current sentence.' })
+      : '{"ok":true}'
+    return { value: { exitCode: 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
+  })
+
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  await clock.advance(5000)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect((await ui.find({ type: 'Text', text: /sentence 3 of 9/ }))).toBeTruthy()
+  expect((await ui.find({ type: 'Text', text: /1:02 \/ about 3:10/ }))).toBeTruthy()
+  expect(await ui.find({ type: 'Client', key: 'seek' })).toBeTruthy()
+
+  await ui.press({ key: 'toggle' })
+  await ui.press({ key: 'back' })
+  await ui.press({ key: 'next' })
+  await ui.press({ key: 'stop' })
+  await ui.post({ to: 30 }, { in: 'seek' })
+  for (const path of ['/toggle', '/skip?by=-10', '/sentence?by=1', '/stop', '/seek?to=30.00']) {
+    expect(calls.some(c => c.path === path)).toBe(true)
+  }
+
+  const finished = { durationMs: 1, isAborted: false, turnId: 't', reason: 'answer' as const, answer: 'Hello there.' }
+  await $.turn.complete(finished)
+  expect(calls.some(c => c.path === '/speak?source=claude' && c.stdin === 'Hello there.')).toBe(true)
+  calls.length = 0
+  await $.turn.complete({ ...finished, agentId: 'sub' })
+  expect(calls.some(c => c.path.startsWith('/speak'))).toBe(false)
+  await ui.unmount()
 })

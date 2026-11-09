@@ -1,1 +1,1 @@
-{ "name": "voice-picker", "version": "0.1.5", "description": "A Voices pane for read-aloud: play a sample of any voice, set it, change speed, toggle auto-read, stop.", "types": "./types/index.d.ts" }
+{ "name": "voice-picker", "version": "0.2.0", "description": "Voices and player pane for voice-reader (or read-aloud): pick a voice and speed, toggle auto-read, pause, rewind, seek.", "types": "./types/index.d.ts" }
