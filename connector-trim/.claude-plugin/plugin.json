@@ -1,0 +1,1 @@
+{ "name": "connector-trim", "version": "0.1.0", "description": "Strips empty fields, image links and padding from large connector results without a model, and keeps the full result on disk." }

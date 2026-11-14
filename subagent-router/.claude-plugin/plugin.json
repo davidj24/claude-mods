@@ -1,0 +1,1 @@
+{ "name": "subagent-router", "version": "0.1.0", "description": "Runs reading and search subagents on Haiku or Sonnet when Claude names no model; hard work keeps the main model." }

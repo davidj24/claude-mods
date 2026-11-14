@@ -1,10 +1,43 @@
 {
   "name": "claude-mods",
-  "owner": { "name": "davidj24" },
+  "owner": {
+    "name": "davidj24"
+  },
   "plugins": [
-    { "name": "blast-radius", "source": "./blast-radius", "description": "Before a destructive shell command runs, lists exactly what it would delete or discard and lets you cancel." },
-    { "name": "cache-thermometer", "source": "./cache-thermometer", "description": "Prompt-cache timer, 5-hour and weekly usage bars, break-even keep-warm." },
-    { "name": "dictation-cleanup", "source": "./dictation-cleanup", "description": "Strips um/uh and stutter repeats from dictated prompts before they are sent." },
-    { "name": "voice-picker", "source": "./voice-picker", "description": "A Voices pane for the read-aloud plugin: play samples, pick a voice, set speed with a slider, toggle auto-read." }
+    {
+      "name": "blast-radius",
+      "source": "./blast-radius",
+      "description": "Before a destructive shell command runs, lists exactly what it would delete or discard and lets you cancel."
+    },
+    {
+      "name": "cache-thermometer",
+      "source": "./cache-thermometer",
+      "description": "Prompt-cache timer, 5-hour and weekly usage bars, break-even keep-warm."
+    },
+    {
+      "name": "dictation-cleanup",
+      "source": "./dictation-cleanup",
+      "description": "Strips um/uh and stutter repeats from dictated prompts before they are sent."
+    },
+    {
+      "name": "voice-picker",
+      "source": "./voice-picker",
+      "description": "A Voices pane for the read-aloud plugin: play samples, pick a voice, set speed with a slider, toggle auto-read."
+    },
+    {
+      "name": "connector-trim",
+      "source": "./connector-trim",
+      "description": "Strips empty fields, image links and padding from large connector results without a model; the full result stays on disk."
+    },
+    {
+      "name": "screenshot-shrink",
+      "source": "./screenshot-shrink",
+      "description": "Takes browser screenshots at half size, about a quarter of the tokens."
+    },
+    {
+      "name": "subagent-router",
+      "source": "./subagent-router",
+      "description": "Runs reading and search subagents on Haiku or Sonnet when Claude names no model."
+    }
   ]
 }

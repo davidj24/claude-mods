@@ -1,0 +1,1 @@
+{ "name": "screenshot-shrink", "version": "0.1.0", "description": "Takes browser screenshots at half size (about a quarter of the tokens) unless Claude asks for a size." }
